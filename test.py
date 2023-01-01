@@ -2,19 +2,14 @@ import os
 from pathlib import Path
 from tqdm import tqdm
 import natsort
-
 import torch
-from torch.utils.data import DataLoader
 import torch.nn as nn
-
+from torch.utils.data import DataLoader
 from utils import utils_html
-from utils.utils_train import get_dataset, get_fixed_language_model, \
-    get_vae_model, get_tokenizer
-from utils.utils_train import visualize_test as visualize
-from utils.utils_train import visualize_long
+from utils.utils_train import get_dataset, get_fixed_language_model, get_vae_model, get_tokenizer
+from utils.utils_train_inter import visualize_test
 from utils.utils_eval import evaluate, evaluate_clip
-from utils.utils import exists, set_requires_grad, sample_data, \
-    mean_pooling, seed_everything
+from utils.utils import exists, set_requires_grad, sample_data, mean_pooling, seed_everything
 
 
 def model_to_gpu(model, gpu, is_train):
@@ -26,11 +21,9 @@ def model_to_gpu(model, gpu, is_train):
 
 def main():
     # argument parsing
-
     from utils.utils_args import process_args
     args = process_args()
-
-    main_worker(args, )
+    main_worker(args)
 
 
 @torch.no_grad()
@@ -38,23 +31,19 @@ def main_worker(args):
     args.gpu = 0
     torch.backends.cudnn.benchmark = True
 
-    assert Path(args.image_text_folder).exists(
-    ), f'The path {args.image_text_folder} was not found.'
+    assert Path(args.image_text_folder).exists(), f'The path {args.image_text_folder} was not found.'
 
     seed_everything(args.seed)
     args.deterministic = True  # NOTE: make everything deterministic
-    if args.eval_mode == 'eval':
+    if args.eval_mode == 'metric':
         args.batch_size = 16  # make samples reproducible
 
     # logging
     dalle_path = Path(args.dalle_path) if exists(args.dalle_path) else None
     if args.dalle_path is None:
-        checkpoints = natsort.natsorted(
-            os.listdir(str(Path(args.log_root) / args.name / 'weights')))
+        checkpoints = natsort.natsorted(os.listdir(str(Path(args.log_root) / args.name / 'weights')))
         assert len(checkpoints) > 0, f'Nothing to resume from.'
-        dalle_path = Path(
-            args.log_root
-        ) / args.name / 'weights' / checkpoints[-1] / 'dalle.pt'
+        dalle_path = Path(args.log_root) / args.name / 'weights' / checkpoints[-1] / 'dalle.pt'
     args.dalle_path = dalle_path
 
     args.name += args.name_suffix  # TODO: remove this
@@ -68,7 +57,7 @@ def main_worker(args):
     assert args.dalle_path
     which_ckpt = str(dalle_path).split('/')[-2]
 
-    if args.eval_mode == 'eval':
+    if args.eval_mode == 'metric':
         args.log_metric_dir = log_dir / 'metrics' / which_ckpt
         os.makedirs(args.log_metric_dir, exist_ok=True)
 
@@ -77,14 +66,12 @@ def main_worker(args):
 
     webpage = None
     if args.use_html:
-        webpage = utils_html.initialize_webpage(log_dir / 'web',
-                                                'DALLE: ' + args.name, resume)
+        webpage = utils_html.initialize_webpage(log_dir / 'web', 'DALLE: ' + args.name, resume)
 
     # tokenizer
 
     if args.fixed_language_model is not None:
-        tokenizer2, language_model, text_feature_dim, encode_text = get_fixed_language_model(
-            args)
+        tokenizer2, language_model, text_feature_dim, encode_text = get_fixed_language_model(args)
         language_model = language_model.cuda()
         tokenizer = None  # TODO: avoid tokenization and get raw text
     else:
@@ -128,8 +115,10 @@ def main_worker(args):
         use_separate_visual_emb=args.use_separate_visual_emb,
         insert_sep=args.insert_sep,
         openai_clip_path=args.openai_clip_model_path,
+        eval_mode=args.eval_mode,
     )
 
+    # load dalle model
     assert exists(dalle_path), 'DALLE model file does not exist'
     ckpt = torch.load(str(dalle_path))
     model_weights = ckpt['weights']
@@ -156,8 +145,8 @@ def main_worker(args):
     dalle = model_to_gpu(dalle, args.gpu, True)
     dalle_module = dalle.module
 
+    # LOADING DATASET
     args.is_shuffle = True
-
     ds = get_dataset(args, tokenizer)
     assert len(ds) > 0, 'dataset is empty'
 
@@ -171,12 +160,12 @@ def main_worker(args):
         shuffle=False,
         drop_last=True,
         sampler=data_sampler,
-        num_workers=0,
+        num_workers=8,
         pin_memory=False,
     )
     dl_iter = sample_data(dl, data_sampler)
 
-    if args.eval_mode == 'eval':  # evaluate quantitative metrics
+    if args.eval_mode == 'metric':  # evaluate quantitative metrics
         if 'fvd_prd' in args.eval_metric:
             evaluate(
                 args,
@@ -195,7 +184,6 @@ def main_worker(args):
                 language_model,
                 dl_iter,
             )
-        exit(0)
 
     pbar = tqdm(range(args.iters),
                 initial=start_iter,
@@ -213,10 +201,10 @@ def main_worker(args):
         text_neg, visuals_neg = None, None
         if args.negvc:
             text, frames, visuals, visuals_neg, text_neg = next(dl_iter)
-            visuals_neg, text_neg = map(lambda t: t.cuda(),
-                                        (visuals_neg, text_neg))
+            visuals_neg, text_neg = map(lambda t: t.cuda(), (visuals_neg, text_neg))
         else:
             text, frames, visuals = next(dl_iter)  # frames [B, T, C, H, W]
+
         if args.visual and len(visuals.shape) == 4:
             assert args.num_visuals == 1
             visuals = visuals.unsqueeze(1)
@@ -240,15 +228,14 @@ def main_worker(args):
                     'attention_mask': encoded_input['attention_mask'].cuda(),
                 }
                 model_output = language_model(**encoded_input)
-                text = mean_pooling(model_output,
-                                    encoded_input['attention_mask'])
+                text = mean_pooling(model_output, encoded_input['attention_mask'])
         else:
             text = text.cuda()
             text_description = None
 
         # =================== visualization ======================
-        if args.eval_mode == 'long':
-            visualize_long(
+        if args.eval_mode == 'normal':
+            visualize_test(
                 args,
                 dalle_module,
                 tokenizer,
@@ -267,11 +254,28 @@ def main_worker(args):
                 language_model,
             )
         else:
-            visualize(
+            # description = "this male is happiness and then he is sadness"
+            # description = [
+            #     "He has beard, brown hair and sideburns. He has a big nose. He has a neutral expression.",
+            #     "He has beard, brown hair and sideburns. He has a big nose. He is sad."
+            #     "He has beard, brown hair and sideburns. He has a big nose. He is happy."
+            # ]
+            # description = args.description
+            # description = [
+            #     "He has beard, brown hair and sideburns. He has a big nose.",
+            #     "He has a neutral expression",
+            #     "He is sad."
+            #     "He is happy."
+            # ]
+
+            # description = [
+            #     "He has beard, brown hair and sideburns. He has a big nose. The man is anger all the time.",
+            # ]
+            visualize_test(
                 args,
-                dalle_module,
-                tokenizer,
-                {
+                dalle_module=dalle_module,
+                tokenizer=tokenizer,
+                data_batch={
                     'description': text_description,
                     'text': text,
                     'text_neg': text_neg,
@@ -279,14 +283,36 @@ def main_worker(args):
                     'visual': visuals,
                     'visual_neg': visuals_neg,
                 },
-                which_iter,
-                webpage,
-                args.description,
-                tokenizer2,
-                language_model,
+                which_iter=which_iter,
+                webpage=webpage,
+                description=description,
+                tokenizer2=tokenizer2,
+                language_model=language_model,
             )
+            # # original design
+            # visualize_test(
+            #     args,
+            #     dalle_module,
+            #     tokenizer,
+            #     {
+            #         'description': text_description,
+            #         'text': text,
+            #         'text_neg': text_neg,
+            #         'target': frames,
+            #         'visual': visuals,
+            #         'visual_neg': visuals_neg,
+            #     },
+            #     which_iter,
+            #     webpage,
+            #     args.description,
+            #     tokenizer2,
+            #     language_model,
+            # )
         # ========================================================
 
 
 if __name__ == "__main__":
+    import warnings
+    warnings.filterwarnings("ignore")
+    os.environ["PYTHONWARNINGS"] = "ignore"
     main()

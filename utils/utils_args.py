@@ -4,21 +4,29 @@ import numpy as np
 
 def get_args_base():
     parser = argparse.ArgumentParser()
-
+    parser.add_argument("--phenaki_sampling",
+                        action="store_true")
+    parser.add_argument("--text_interpolation",
+                        action="store_true")
     parser.add_argument('--vae_path',
                         type=str,
                         help='path to the pretrained VQGAN for video frames')
+    parser.add_argument('--port',
+                        type=int,
+                        default=35000)
     parser.add_argument('--cvae_path',
                         type=str,
                         help='path to the VQGAN for visual controls')
-    parser.add_argument(
-        '--dalle_path',
-        type=str,
-        default=None,
-        help=
-        'path to your mmvid model, used for testing or initializing training')
-    parser.add_argument('--which_vae', type=str, default='vqgan1024')
-    parser.add_argument('--transformer_path', type=str, default=None)
+    parser.add_argument('--dalle_path',
+                        type=str,
+                        default=None,
+                        help='path to your mmvid model, used for testing or initializing training')
+    parser.add_argument('--which_vae',
+                        type=str,
+                        default='vqgan1024')
+    parser.add_argument('--transformer_path',
+                        type=str,
+                        default=None)
     parser.add_argument('--image_text_folder',
                         type=str,
                         required=True,
@@ -27,28 +35,21 @@ def get_args_base():
                         type=str,
                         default='video_text',
                         help='dataset name')
-    parser.add_argument(
-        '--dataset_keys',
-        type=str,
-        default=None,
-        help=
-        'a text file specifying a subset of keys to use. (a key is the stem without extension)'
-    )
-    parser.add_argument(
-        '--dataset_cache',
-        type=str,
-        default=None,
-        help='path to a cache file (.pkl) to use for the dataset')
+    parser.add_argument('--dataset_keys',
+                        type=str,
+                        default=None,
+                        help='a text file specifying a subset of keys to use. (a key is the stem without extension)')
+    parser.add_argument('--dataset_cache',
+                        type=str,
+                        default=None,
+                        help='path to a cache file (.pkl) to use for the dataset')
     parser.add_argument('--video_only',
                         action='store_true',
                         help='toggle this to use only video without text')
-    parser.add_argument(
-        '--truncate_captions',
-        dest='truncate_captions',
-        action='store_true',
-        help=
-        'Captions passed in which exceed the max token length will be truncated if this is set.'
-    )
+    parser.add_argument('--truncate_captions',
+                        dest='truncate_captions',
+                        action='store_true',
+                        help='Captions passed in which exceed the max token length will be truncated if this is set.')
     parser.add_argument('--random_resize_crop_lower_ratio',
                         dest='resize_ratio',
                         type=float,
@@ -61,22 +62,16 @@ def get_args_base():
     parser.add_argument('--bpe_path',
                         type=str,
                         help='path to your BPE json file')
-    parser.add_argument(
-        '--fp16',
-        action='store_true',
-        help='(experimental) - Enable DeepSpeed 16 bit precision. Reduces VRAM.'
-    )
-    parser.add_argument(
-        '--amp',
-        action='store_true',
-        help=
-        'Apex "O1" automatic mixed precision. More stable than 16 bit precision. Can\'t be used in conjunction with deepspeed zero stages 1-3.'
-    )
-    parser.add_argument(
-        '--name',
-        default='dalle_train_transformer',
-        help=
-        'experiment name, training logs are stored in log_dir=log_root/name')
+    parser.add_argument('--fp16',
+                        action='store_true',
+                        help='(experimental) - Enable DeepSpeed 16 bit precision. Reduces VRAM.')
+    parser.add_argument('--amp',
+                        action='store_true',
+                        help='Apex "O1" automatic mixed precision. More stable than 16 bit precision. '
+                             'Can\'t be used in conjunction with deepspeed zero stages 1-3.')
+    parser.add_argument('--name',
+                        default='dalle_train_transformer',
+                        help='experiment name, training logs are stored in log_dir=log_root/name')
     parser.add_argument('--visual',
                         action='store_true',
                         help='add visual control?')
@@ -105,50 +100,37 @@ def get_args_base():
                         default=4,
                         type=int,
                         help='Step size of the data loader')
-    parser.add_argument(
-        '--rand_visual',
-        action='store_true',
-        help=
-        'toggle this to randomly erase visual control tokens during training')
+    parser.add_argument('--rand_visual',
+                        action='store_true',
+                        help='toggle this to randomly erase visual control tokens during training')
     parser.add_argument('--fullvc',
                         action='store_true',
                         help='disable random erasing of visual control tokens')
-    parser.add_argument(
-        '--negvc',
-        action='store_true',
-        help=
-        'toggle this to use negative visual control from data loader. This is used for REL during training. Default is to swap the control sequence along batch.'
-    )
-    parser.add_argument(
-        '--vc_mode',
-        type=str,
-        default=None,
-        help=
-        'specifies various modes for masking out visual control tokens, e.g. partially masked faces etc.'
-    )
-    parser.add_argument(
-        '--attr_mode',
-        type=str,
-        default='object',
-        help=
-        'specifies various modes for dataset attributes, e.g. mask+text etc.')
+    parser.add_argument('--negvc',
+                        action='store_true',
+                        help='toggle this to use negative visual control from data loader. '
+                             'This is used for REL during training. Default is to swap the control sequence along batch.')
+    parser.add_argument('--vc_mode',
+                        type=str,
+                        default=None,
+                        help='specifies various modes for masking out visual control tokens, e.g. partially masked faces etc.')
+    parser.add_argument('--attr_mode',
+                        type=str,
+                        default='object',
+                        help='specifies various modes for dataset attributes, e.g. mask+text etc.')
     parser.add_argument('--dropout_vc',
                         type=float,
                         default=0.1,
                         help='prob of visual control to be zeroed')
-    parser.add_argument(
-        '--mask_predict_steps',
-        nargs='+',
-        default=[0],
-        type=int,
-        help='mask predict steps, this will override mp_T if nonzero')
-    parser.add_argument(
-        '--mask_predict_steps1',
-        default=0,
-        type=int,
-        help=
-        'mask predict steps for counterfactual samples (conditioned on the current text and the next visual control)'
-    )
+    parser.add_argument('--mask_predict_steps',
+                        nargs='+',
+                        default=[0],
+                        type=int,
+                        help='mask predict steps, this will override mp_T if nonzero')
+    parser.add_argument('--mask_predict_steps1',
+                        default=0,
+                        type=int,
+                        help='mask predict steps for counterfactual samples (conditioned on the current text and the next visual control)')
     parser.add_argument('--n_sample',
                         default=4,
                         type=int,
@@ -160,14 +142,10 @@ def get_args_base():
     parser.add_argument('--drop_sentence',
                         action='store_true',
                         help='toggle this to use text dropout during training')
-    parser.add_argument(
-        '--fixed_language_model',
-        type=str,
-        default=None,
-        help=
-        'specify a pretrined language model to use for text augmentation, e.g. roberta-large'
-    )
-
+    parser.add_argument('--fixed_language_model',
+                        type=str,
+                        default=None,
+                        help='specify a pretrined language model to use for text augmentation, e.g. roberta-large')
     parser.add_argument('--dim',
                         default=768,
                         type=int,
@@ -184,13 +162,10 @@ def get_args_base():
                         type=str,
                         default='openai_clip_visual',
                         help='which transformer to use')
-    parser.add_argument(
-        '--image_size',
-        default=None,
-        type=int,
-        help=
-        'force to use this size if set to > 0, otherwise use VQGAN\'s default size'
-    )
+    parser.add_argument('--image_size',
+                        default=None,
+                        type=int,
+                        help='force to use this size if set to > 0, otherwise use VQGAN\'s default size')
     parser.add_argument('--num_targets',
                         default=1,
                         type=int,
@@ -203,21 +178,14 @@ def get_args_base():
                         action='store_true',
                         help='toggle this to use separate visual embeddings')
     parser.add_argument('--num_workers', default=16, type=int)
-    parser.add_argument(
-        '--text_emb_bottleneck',
-        type=str,
-        default=None,
-        help=
-        'if we use a pretrained language model, we can specify the bottleneck layer (number of channels) to use'
-    )
-    parser.add_argument(
-        '--visual_aug_mode',
-        type=str,
-        default=None,
-        help=
-        'specify the visual augmentation mode, e.g. motion_color will add color jitter (used when conditioning on image and video)'
-    )
-
+    parser.add_argument('--text_emb_bottleneck',
+                        type=str,
+                        default=None,
+                        help='if we use a pretrained language model, we can specify the bottleneck layer (number of channels) to use')
+    parser.add_argument('--visual_aug_mode',
+                        type=str,
+                        default=None,
+                        help='specify the visual augmentation mode, e.g. motion_color will add color jitter (used when conditioning on image and video)')
     parser.add_argument('--mp_T1n',
                         type=int,
                         default=10,
@@ -280,41 +248,25 @@ def get_args_base():
                         help='number of total steps for mask-predict')
     parser.add_argument('--mp_B', type=int, default=1, help='beam search size')
 
-    parser.add_argument(
-        '--ar',
-        action='store_true',
-        help='toggle this to use auto-regressive model (ART-V)')
-    parser.add_argument(
-        '--slow',
-        action='store_true',
-        help=
-        'toggle this to add speed variants to dataset, used in iPER. Please see iPER dataset for details'
-    )
-    parser.add_argument(
-        '--insert_sep',
-        action='store_true',
-        help=
-        'toggle this to insert a separator token between visual control frames'
-    )
-    parser.add_argument(
-        '--pnag_argmax',
-        action='store_true',
-        help=
-        'toggle this to use argmax in mask predict, inspired by PNAG in UFC-BERT'
-    )
-    parser.add_argument(
-        '--pnag_dynamic',
-        action='store_true',
-        help=
-        'toggle this to use dynamic stopping in mask predict, inspired by PNAG in UFC-BERT'
-    )
-    parser.add_argument(
-        '--openai_clip_model_path',
-        type=str,
-        default='ViT-B-32.pt',
-        help=
-        "you can download from here: https://openaipublic.azureedge.net/clip/models/40d365715913c9da98579312b702a82c18be219cc2a73407c4526f58eba950af/ViT-B-32.pt",
-    )
+    parser.add_argument('--ar',
+                        action='store_true',
+                        help='toggle this to use auto-regressive model (ART-V)')
+    parser.add_argument('--slow',
+                        action='store_true',
+                        help='toggle this to add speed variants to dataset, used in iPER. Please see iPER dataset for details')
+    parser.add_argument('--insert_sep',
+                        action='store_true',
+                        help='toggle this to insert a separator token between visual control frames')
+    parser.add_argument('--pnag_argmax',
+                        action='store_true',
+                        help='toggle this to use argmax in mask predict, inspired by PNAG in UFC-BERT')
+    parser.add_argument('--pnag_dynamic',
+                        action='store_true',
+                        help='toggle this to use dynamic stopping in mask predict, inspired by PNAG in UFC-BERT')
+    parser.add_argument('--openai_clip_model_path',
+                        type=str,
+                        default='/mnt/lustre/zhuhao.p/jianhui/MMVID/saved_models/ViT-B-32.pt',
+                        help="you can download from here: https://openaipublic.azureedge.net/clip/models/40d365715913c9da98579312b702a82c18be219cc2a73407c4526f58eba950af/ViT-B-32.pt")
     return parser
 
 
@@ -344,14 +296,11 @@ def get_args_train():
                         default='nccl',
                         type=str,
                         help='distributed backend')
-    parser.add_argument(
-        '--multiprocessing_distributed',
-        action='store_true',
-        help=
-        'Use multi-processing distributed training to launch N processes per node, which has N GPUs.'
-    )
+    parser.add_argument('--multiprocessing_distributed',
+                        action='store_true',
+                        help='Use multi-processing distributed training to launch N processes per node, which has N GPUs.')
     parser.add_argument('--save_every_n_steps',
-                        default=5000,
+                        default=1000,
                         type=int,
                         help='Save a checkpoint every n steps')
     parser.add_argument('--learning_rate',
@@ -408,28 +357,21 @@ def get_args_train():
                         default=0.5,
                         type=float,
                         help='weight for VID loss')
-    parser.add_argument(
-        '--msm_strategy_prob',
-        type=str,
-        default='7,1,1,1',
-        help=
-        'comma separated list, specifies the probabilites of sampling each masking strategy'
-    )
-    parser.add_argument(
-        '--msm_bernoulli_prob',
-        type=str,
-        default='0.2,0.2',
-        help=
-        'comma separated list, specifies the min and max probabilities of random Bernoulli masking'
-    )
+    parser.add_argument('--msm_strategy_prob',
+                        type=str,
+                        default='7,1,1,1',
+                        help='comma separated list, specifies the probabilites of sampling each masking strategy')
+    parser.add_argument('--msm_bernoulli_prob',
+                        type=str,
+                        default='0.2,0.2',
+                        help='comma separated list, specifies the min and max probabilities of random Bernoulli masking')
     parser.add_argument('--vid_strategy_prob',
                         type=str,
                         default='1,1,1,1',
                         help='comma separated list')
-    parser.add_argument(
-        '--rel_no_fully_masked',
-        action='store_true',
-        help='toggle this to exclude fully masked sequences in REL loss')
+    parser.add_argument('--rel_no_fully_masked',
+                        action='store_true',
+                        help='toggle this to exclude fully masked sequences in REL loss')
     parser.add_argument('--pc_prob',
                         type=float,
                         default=0,
@@ -441,56 +383,54 @@ def get_args_train():
 
 def get_args_test():
     parser = get_args_base()
-    parser.add_argument(
-        '--name_suffix',
-        default='',
-        type=str,
-        help=
-        'suffix to add to the experiment name, if you don\'t want to mess up the original log files (in training)'
-    )
+    parser.add_argument('--name_suffix',
+                        default='',
+                        type=str,
+                        help='suffix to add to the experiment name, if you don\'t want to mess up the original log files (in training)')
     parser.add_argument('--test_mode',
                         type=str,
                         default=None,
                         help='used in testing, e.g. ')
-    parser.add_argument('--eval_mode', type=str, default=None)
+    parser.add_argument('--eval_mode',
+                        type=str,
+                        choices=['normal', 'test_inter', 'phenaki', 'metric'],
+                        default='normal')
     parser.add_argument('--eval_metric',
                         type=str,
                         nargs='+',
                         default=['fvd_prd'])
     parser.add_argument('--eval_num', type=int, default=2048)
-    parser.add_argument(
-        '--pc_mode',
-        type=str,
-        default=None,
-        help=
-        'reserved for future use (if we want to use more complicated preservation control)'
-    )
-    parser.add_argument(
-        '--description',
-        type=str,
-        default=None,
-        help=
-        'specify a text prompt, which will overwrite the text from dataloader')
-    parser.add_argument('--no_debug', action='store_true')
+    parser.add_argument('--pc_mode',
+                        type=str,
+                        default=None,
+                        help='reserved for future use (if we want to use more complicated preservation control)')
+    parser.add_argument('--description',
+                        type=lambda s: [str(item) for item in s.split(';')],
+                        help='specify a text prompt, which will overwrite the text from dataloader')
+    # parser.add_argument(
+    #     '--description',
+    #     type=str,
+    #     default=None,
+    #     help=
+    #     'specify a text prompt, which will overwrite the text from dataloader')
+    parser.add_argument('--no_debug',
+                        action='store_true')
     parser.add_argument('--t_overlap',
                         default=1,
                         type=int,
                         help='in long sequence, how many frames to overlap')
-    parser.add_argument(
-        '--t_repeat',
-        default=10,
-        type=int,
-        help='in long sequence generation mode, repeat sampling this many times'
-    )
-    parser.add_argument('--use_cvae', action='store_true')
-    parser.add_argument('--save_codebook', action='store_true')
-    parser.add_argument(
-        '--long_mode',
-        type=str,
-        default='long',
-        help=
-        'specify long sequence generation mode, e.g. long, interp, interp_real'
-    )
+    parser.add_argument('--t_repeat',
+                        default=10,
+                        type=int,
+                        help='in long sequence generation mode, repeat sampling this many times')
+    parser.add_argument('--use_cvae',
+                        action='store_true')
+    parser.add_argument('--save_codebook',
+                        action='store_true')
+    # parser.add_argument('--long_mode',
+    #                     type=str,
+    #                     default='long',
+    #                     help='specify long sequence generation mode, e.g. long, interp, interp_real')
     args = parser.parse_args()
 
     return args, parser

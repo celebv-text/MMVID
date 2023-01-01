@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 from torchvision.io import write_video
 from torchvision import utils
-
+import torch.nn.functional as F
 
 class Config:
     def __init__(self, **kwargs):
@@ -67,8 +67,7 @@ def clip_similarity(model, tokenizer, image, description):
         image = F.interpolate(image, (input_resolution, input_resolution))
     image_mean = torch.tensor([0.48145466, 0.4578275, 0.40821073]).cuda()
     image_std = torch.tensor([0.26862954, 0.26130258, 0.27577711]).cuda()
-    image_input = (image - image_mean[:, None, None]) / image_std[:, None,
-                                                                  None]
+    image_input = (image - image_mean[:, None, None]) / image_std[:, None, None]
     text_input = tokenizer.tokenize(
         description,
         context_length,
