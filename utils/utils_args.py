@@ -17,6 +17,7 @@ def get_args_base():
     parser.add_argument('--cvae_path',
                         type=str,
                         help='path to the VQGAN for visual controls')
+    # path where the downloaded model stored
     parser.add_argument('--dalle_path',
                         type=str,
                         default=None,
@@ -27,6 +28,7 @@ def get_args_base():
     parser.add_argument('--transformer_path',
                         type=str,
                         default=None)
+    # this can be any path if using --description during testing
     parser.add_argument('--image_text_folder',
                         type=str,
                         required=True,
@@ -404,15 +406,10 @@ def get_args_test():
                         type=str,
                         default=None,
                         help='reserved for future use (if we want to use more complicated preservation control)')
+    # set this flag to directly test text-to-video, no need to construct a test dataset
     parser.add_argument('--description',
                         type=lambda s: [str(item) for item in s.split(';')],
                         help='specify a text prompt, which will overwrite the text from dataloader')
-    # parser.add_argument(
-    #     '--description',
-    #     type=str,
-    #     default=None,
-    #     help=
-    #     'specify a text prompt, which will overwrite the text from dataloader')
     parser.add_argument('--no_debug',
                         action='store_true')
     parser.add_argument('--t_overlap',
@@ -427,10 +424,6 @@ def get_args_test():
                         action='store_true')
     parser.add_argument('--save_codebook',
                         action='store_true')
-    # parser.add_argument('--long_mode',
-    #                     type=str,
-    #                     default='long',
-    #                     help='specify long sequence generation mode, e.g. long, interp, interp_real')
     args = parser.parse_args()
 
     return args, parser

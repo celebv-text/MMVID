@@ -557,7 +557,7 @@ class BERT(nn.Module):
         # control_emb: [B, 1 + text_seq_len + 2, dim] or [B, 1 + text_seq_len + visual_seq_len + 2, dim]
         control_seq_len, device = control_emb.shape[1], control_emb.device
         # N is number of masked sequence
-        if args.eval_mode == 'phenaki':
+        if self.eval_mode == 'phenaki':
             if preserve is None:
                 t_overlap = 0
             N = self.target_seq_len - self.image_seq_len * t_overlap
@@ -575,7 +575,7 @@ class BERT(nn.Module):
         has_prime_frame = False
         if preserve is not None:
             has_prime_frame = True if t_overlap != 0 else False
-            if args.eval_mode == 'phenaki':
+            if self.eval_mode == 'phenaki':
                 print("overlapping t is: ", t_overlap)
                 preserve_mask1[:, :self.image_seq_len * t_overlap] = 1
                 preserve = rearrange(preserve, '(b t) n -> b (t n)', b=bs, n=self.image_seq_len)  # [bs, 512]

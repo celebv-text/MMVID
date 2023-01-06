@@ -7,7 +7,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from utils import utils_html
 from utils.utils_train import get_dataset, get_fixed_language_model, get_vae_model, get_tokenizer
-from utils.utils_train_inter import visualize_test
+from utils.utils_train import visualize_test
 from utils.utils_eval import evaluate, evaluate_clip
 from utils.utils import exists, set_requires_grad, sample_data, mean_pooling, seed_everything
 
@@ -80,7 +80,6 @@ def main_worker(args):
         tokenizer = get_tokenizer(args)
 
     # model path
-
     if args.vae_path == '':
         args.vae_path = None
     if args.cvae_path == '':
@@ -145,170 +144,181 @@ def main_worker(args):
     dalle = model_to_gpu(dalle, args.gpu, True)
     dalle_module = dalle.module
 
-    # LOADING DATASET
-    args.is_shuffle = True
-    ds = get_dataset(args, tokenizer)
-    assert len(ds) > 0, 'dataset is empty'
-
-    print(f'{len(ds)} image-text pairs found for training')
-
-    data_sampler = None
-
-    dl = DataLoader(
-        ds,
-        batch_size=args.batch_size,
-        shuffle=False,
-        drop_last=True,
-        sampler=data_sampler,
-        num_workers=8,
-        pin_memory=False,
-    )
-    dl_iter = sample_data(dl, data_sampler)
-
-    if args.eval_mode == 'metric':  # evaluate quantitative metrics
-        if 'fvd_prd' in args.eval_metric:
-            evaluate(
-                args,
-                dalle_module,
-                tokenizer,
-                tokenizer2,
-                language_model,
-                dl_iter,
-            )
-        if 'clip' in args.eval_metric:
-            evaluate_clip(
-                args,
-                dalle_module,
-                tokenizer,
-                tokenizer2,
-                language_model,
-                dl_iter,
-            )
-
-    pbar = tqdm(range(args.iters),
-                initial=start_iter,
-                dynamic_ncols=True,
-                smoothing=0.01)
-
-    for idx in pbar:
-        i = idx + start_iter
-        which_iter = f"{i:07d}"
-
-        if i > args.iters:
-            print('done!')
-            break
-
-        text_neg, visuals_neg = None, None
-        if args.negvc:
-            text, frames, visuals, visuals_neg, text_neg = next(dl_iter)
-            visuals_neg, text_neg = map(lambda t: t.cuda(), (visuals_neg, text_neg))
-        else:
-            text, frames, visuals = next(dl_iter)  # frames [B, T, C, H, W]
-
-        if args.visual and len(visuals.shape) == 4:
-            assert args.num_visuals == 1
-            visuals = visuals.unsqueeze(1)
-
-        if args.fp16:
-            frames = frames.half()
-
-        frames, visuals = map(lambda t: t.cuda(), (frames, visuals))
-        if args.fixed_language_model is not None:
-            text_description = text
-            with torch.no_grad():
-                encoded_input = tokenizer2(
-                    text_description,
-                    return_tensors='pt',
-                    padding=True,
-                    truncation=True,
-                    max_length=args.text_seq_len,
+    if args.description is not None:
+        pbar = tqdm(range(args.iters),
+                    initial=start_iter,
+                    dynamic_ncols=True,
+                    smoothing=0.01)
+        for idx in pbar:
+            i = idx + start_iter
+            which_iter = f"{i:07d}"
+            # =================== visualization ======================
+            if args.eval_mode == 'normal':
+                visualize_test(
+                    args,
+                    dalle_module,
+                    tokenizer,
+                    {
+                        'description': None,
+                        'text': None,
+                        'text_neg': None,
+                        'target': None,
+                        'visual': None,
+                        'visual_neg': None,
+                    },
+                    which_iter,
+                    webpage,
+                    args.description,
+                    tokenizer2,
+                    language_model,
                 )
-                encoded_input = {
-                    'input_ids': encoded_input['input_ids'].cuda(),
-                    'attention_mask': encoded_input['attention_mask'].cuda(),
-                }
-                model_output = language_model(**encoded_input)
-                text = mean_pooling(model_output, encoded_input['attention_mask'])
-        else:
-            text = text.cuda()
-            text_description = None
+            else:
+                visualize_test(
+                    args,
+                    dalle_module=dalle_module,
+                    tokenizer=tokenizer,
+                    data_batch={
+                        'description': None,
+                        'text': None,
+                        'text_neg': None,
+                        'target': None,
+                        'visual': None,
+                        'visual_neg': None,
+                    },
+                    which_iter=which_iter,
+                    webpage=webpage,
+                    description=description,
+                    tokenizer2=tokenizer2,
+                    language_model=language_model,
+                )
+    else:
+        # LOADING DATASET
+        args.is_shuffle = True
+        ds = get_dataset(args, tokenizer)
+        assert len(ds) > 0, 'dataset is empty'
 
-        # =================== visualization ======================
-        if args.eval_mode == 'normal':
-            visualize_test(
-                args,
-                dalle_module,
-                tokenizer,
-                {
-                    'description': text_description,
-                    'text': text,
-                    'text_neg': text_neg,
-                    'target': frames,
-                    'visual': visuals,
-                    'visual_neg': visuals_neg,
-                },
-                which_iter,
-                webpage,
-                args.description,
-                tokenizer2,
-                language_model,
-            )
-        else:
-            # description = "this male is happiness and then he is sadness"
-            # description = [
-            #     "He has beard, brown hair and sideburns. He has a big nose. He has a neutral expression.",
-            #     "He has beard, brown hair and sideburns. He has a big nose. He is sad."
-            #     "He has beard, brown hair and sideburns. He has a big nose. He is happy."
-            # ]
-            # description = args.description
-            # description = [
-            #     "He has beard, brown hair and sideburns. He has a big nose.",
-            #     "He has a neutral expression",
-            #     "He is sad."
-            #     "He is happy."
-            # ]
+        print(f'{len(ds)} image-text pairs found for training')
 
-            # description = [
-            #     "He has beard, brown hair and sideburns. He has a big nose. The man is anger all the time.",
-            # ]
-            visualize_test(
-                args,
-                dalle_module=dalle_module,
-                tokenizer=tokenizer,
-                data_batch={
-                    'description': text_description,
-                    'text': text,
-                    'text_neg': text_neg,
-                    'target': frames,
-                    'visual': visuals,
-                    'visual_neg': visuals_neg,
-                },
-                which_iter=which_iter,
-                webpage=webpage,
-                description=description,
-                tokenizer2=tokenizer2,
-                language_model=language_model,
-            )
-            # # original design
-            # visualize_test(
-            #     args,
-            #     dalle_module,
-            #     tokenizer,
-            #     {
-            #         'description': text_description,
-            #         'text': text,
-            #         'text_neg': text_neg,
-            #         'target': frames,
-            #         'visual': visuals,
-            #         'visual_neg': visuals_neg,
-            #     },
-            #     which_iter,
-            #     webpage,
-            #     args.description,
-            #     tokenizer2,
-            #     language_model,
-            # )
-        # ========================================================
+        data_sampler = None
+
+        dl = DataLoader(
+            ds,
+            batch_size=args.batch_size,
+            shuffle=False,
+            drop_last=True,
+            sampler=data_sampler,
+            num_workers=8,
+            pin_memory=False,
+        )
+        dl_iter = sample_data(dl, data_sampler)
+
+        if args.eval_mode == 'metric':  # evaluate quantitative metrics
+            if 'fvd_prd' in args.eval_metric:
+                evaluate(
+                    args,
+                    dalle_module,
+                    tokenizer,
+                    tokenizer2,
+                    language_model,
+                    dl_iter,
+                )
+            if 'clip' in args.eval_metric:
+                evaluate_clip(
+                    args,
+                    dalle_module,
+                    tokenizer,
+                    tokenizer2,
+                    language_model,
+                    dl_iter,
+                )
+
+        pbar = tqdm(range(args.iters),
+                    initial=start_iter,
+                    dynamic_ncols=True,
+                    smoothing=0.01)
+
+        for idx in pbar:
+            i = idx + start_iter
+            which_iter = f"{i:07d}"
+
+            if i > args.iters:
+                print('done!')
+                break
+
+            text_neg, visuals_neg = None, None
+            if args.negvc:
+                text, frames, visuals, visuals_neg, text_neg = next(dl_iter)
+                visuals_neg, text_neg = map(lambda t: t.cuda(), (visuals_neg, text_neg))
+            else:
+                text, frames, visuals = next(dl_iter)  # frames [B, T, C, H, W]
+
+            if args.visual and len(visuals.shape) == 4:
+                assert args.num_visuals == 1
+                visuals = visuals.unsqueeze(1)
+
+            if args.fp16:
+                frames = frames.half()
+
+            frames, visuals = map(lambda t: t.cuda(), (frames, visuals))
+            if args.fixed_language_model is not None:
+                text_description = text
+                with torch.no_grad():
+                    encoded_input = tokenizer2(
+                        text_description,
+                        return_tensors='pt',
+                        padding=True,
+                        truncation=True,
+                        max_length=args.text_seq_len,
+                    )
+                    encoded_input = {
+                        'input_ids': encoded_input['input_ids'].cuda(),
+                        'attention_mask': encoded_input['attention_mask'].cuda(),
+                    }
+                    model_output = language_model(**encoded_input)
+                    text = mean_pooling(model_output, encoded_input['attention_mask'])
+            else:
+                text = text.cuda()
+                text_description = None
+
+            # =================== visualization ======================
+            if args.eval_mode == 'normal':
+                visualize_test(
+                    args,
+                    dalle_module,
+                    tokenizer,
+                    {
+                        'description': text_description,
+                        'text': text,
+                        'text_neg': text_neg,
+                        'target': frames,
+                        'visual': visuals,
+                        'visual_neg': visuals_neg,
+                    },
+                    which_iter,
+                    webpage,
+                    args.description,
+                    tokenizer2,
+                    language_model,
+                )
+            else:
+                visualize_test(
+                    args,
+                    dalle_module=dalle_module,
+                    tokenizer=tokenizer,
+                    data_batch={
+                        'description': text_description,
+                        'text': text,
+                        'text_neg': text_neg,
+                        'target': frames,
+                        'visual': visuals,
+                        'visual_neg': visuals_neg,
+                    },
+                    which_iter=which_iter,
+                    webpage=webpage,
+                    description=description,
+                    tokenizer2=tokenizer2,
+                    language_model=language_model,
+                )
 
 
 if __name__ == "__main__":
